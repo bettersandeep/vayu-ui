@@ -200,22 +200,31 @@ func (s Service) DeleteSource(ctx context.Context, id int, deleteReplicationSlot
 
 	// Slot drop only applies to postgres sources with a CDC update method.
 	dropSlot := false
+	var slotWarnings []string
 	if deleteReplicationSlot {
 		if slot, ok := parsePostgresCDCSlot(src.Type, src.Config); ok {
-			// Shared-slot guard: block when any OTHER source points at the
-			// same host+port+database+slot tuple.
+			// Shared-slot guard: block only when another source on the same
+			// host+port+database+slot tuple has ACTIVE jobs. Sharing sources
+			// with no active jobs surface as a warning instead.
+			activeJobs, _, err := s.jobsSharingSlot(slot, 0)
+			if err != nil {
+				return nil, err
+			}
+			if len(activeJobs) > 0 {
+				return nil, fmt.Errorf("%w: replication slot '%s' is also used by active job(s): %s; uncheck the replication slot option or delete those jobs first",
+					constants.ErrReplicationSlotShared, slot.Slot, strings.Join(activeJobs, ", "))
+			}
 			allSources, err := s.db.ListSources()
 			if err != nil {
 				return nil, fmt.Errorf("failed to list sources for shared-slot check: %s", err)
 			}
-			shared := sourcesSharingSlot(allSources, slot, id)
-			if len(shared) > 0 {
+			if shared := sourcesSharingSlot(allSources, slot, id); len(shared) > 0 {
 				names := make([]string, 0, len(shared))
 				for _, other := range shared {
 					names = append(names, other.Name)
 				}
-				return nil, fmt.Errorf("%w: replication slot '%s' is also used by source(s): %s; uncheck the replication slot option or delete those sources first",
-					constants.ErrReplicationSlotShared, slot.Slot, strings.Join(names, ", "))
+				slotWarnings = append(slotWarnings, fmt.Sprintf("replication slot '%s' is also referenced by source(s): %s; validations and inactive jobs on those sources will fail until the slot is recreated",
+					slot.Slot, strings.Join(names, ", ")))
 			}
 			dropSlot = true
 		}
@@ -232,7 +241,10 @@ func (s Service) DeleteSource(ctx context.Context, id int, deleteReplicationSlot
 	// warning while the deletion itself stays successful (drop is idempotent).
 	resp := &dto.DeleteSourceResponse{Name: src.Name}
 	if dropSlot {
-		resp.ReplicationSlotWarning = s.dropReplicationSlot(ctx, src)
+		if w := s.dropReplicationSlot(ctx, src); w != "" {
+			slotWarnings = append(slotWarnings, w)
+		}
+		resp.ReplicationSlotWarning = strings.Join(slotWarnings, "; ")
 	}
 
 	telemetry.TrackSourcesStatus(ctx)

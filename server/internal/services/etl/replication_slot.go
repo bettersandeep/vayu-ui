@@ -68,11 +68,13 @@ func sourcesSharingSlot(sources []*models.Source, slot pgCDCSlot, excludeSourceI
 }
 
 // jobsSharingSlot returns names of jobs other than excludeJobID whose source
-// points at the same slot tuple (including other jobs on the same source row).
-func (s Service) jobsSharingSlot(slot pgCDCSlot, excludeJobID int) ([]string, error) {
+// points at the same slot tuple (including other jobs on the same source row),
+// split by the job's active flag. Active jobs block a slot drop; inactive jobs
+// only produce a warning.
+func (s Service) jobsSharingSlot(slot pgCDCSlot, excludeJobID int) (active, inactive []string, err error) {
 	sources, err := s.db.ListSources()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list sources for shared-slot check: %s", err)
+		return nil, nil, fmt.Errorf("failed to list sources for shared-slot check: %s", err)
 	}
 	sourceIDs := make([]int, 0)
 	for _, src := range sourcesSharingSlot(sources, slot, 0) {
@@ -80,15 +82,19 @@ func (s Service) jobsSharingSlot(slot pgCDCSlot, excludeJobID int) ([]string, er
 	}
 	jobs, err := s.db.GetJobsBySourceID(sourceIDs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list jobs for shared-slot check: %s", err)
+		return nil, nil, fmt.Errorf("failed to list jobs for shared-slot check: %s", err)
 	}
-	var names []string
 	for _, job := range jobs {
-		if job.ID != excludeJobID {
-			names = append(names, job.Name)
+		if job.ID == excludeJobID {
+			continue
+		}
+		if job.Active {
+			active = append(active, job.Name)
+		} else {
+			inactive = append(inactive, job.Name)
 		}
 	}
-	return names, nil
+	return active, inactive, nil
 }
 
 // dropReplicationSlot runs the driver's `check --drop-replication-slot` for

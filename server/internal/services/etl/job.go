@@ -245,17 +245,23 @@ func (s Service) DeleteJob(ctx context.Context, jobID int, deleteReplicationSlot
 
 	// Slot drop only applies to postgres sources with a CDC update method.
 	var slotSource *models.Source
+	var slotWarnings []string
 	if deleteReplicationSlot && job.Source != nil {
 		if slot, ok := parsePostgresCDCSlot(job.Source.Type, job.Source.Config); ok {
-			// Shared-slot guard: block the drop (and the deletion) when any
-			// other job's source points at the same host+port+database+slot.
-			otherJobs, err := s.jobsSharingSlot(slot, jobID)
+			// Shared-slot guard: block the drop (and the deletion) only when an
+			// ACTIVE job's source points at the same host+port+database+slot.
+			// Inactive jobs don't block; they surface as a warning instead.
+			activeJobs, inactiveJobs, err := s.jobsSharingSlot(slot, jobID)
 			if err != nil {
 				return nil, err
 			}
-			if len(otherJobs) > 0 {
-				return nil, fmt.Errorf("%w: replication slot '%s' is also used by job(s): %s; uncheck the replication slot option or delete those jobs first",
-					constants.ErrReplicationSlotShared, slot.Slot, strings.Join(otherJobs, ", "))
+			if len(activeJobs) > 0 {
+				return nil, fmt.Errorf("%w: replication slot '%s' is also used by active job(s): %s; uncheck the replication slot option or delete those jobs first",
+					constants.ErrReplicationSlotShared, slot.Slot, strings.Join(activeJobs, ", "))
+			}
+			if len(inactiveJobs) > 0 {
+				slotWarnings = append(slotWarnings, fmt.Sprintf("replication slot '%s' was also used by inactive job(s): %s; those jobs will fail if reactivated",
+					slot.Slot, strings.Join(inactiveJobs, ", ")))
 			}
 
 			// Cancel this job's running workflows so the slot is not active at drop time.
@@ -279,7 +285,10 @@ func (s Service) DeleteJob(ctx context.Context, jobID int, deleteReplicationSlot
 	// while the deletion itself stays successful (drop is idempotent, retryable).
 	resp := &dto.DeleteJobResponse{Name: job.Name}
 	if slotSource != nil {
-		resp.ReplicationSlotWarning = s.dropReplicationSlot(ctx, slotSource)
+		if w := s.dropReplicationSlot(ctx, slotSource); w != "" {
+			slotWarnings = append(slotWarnings, w)
+		}
+		resp.ReplicationSlotWarning = strings.Join(slotWarnings, "; ")
 	}
 
 	return resp, nil

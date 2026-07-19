@@ -6,14 +6,21 @@ import SyncModeSectionView from "./SyncModeSectionView"
 import {
 	selectActiveSelectedStream,
 	selectActiveStreamData,
+	selectIsStreamEnabled,
 	useStreamSelectionStore,
 } from "../../stores"
 
 const SyncModeSectionSingle = () => {
 	const updateSyncMode = useStreamSelectionStore(state => state.updateSyncMode)
+	const updateDestinationKeyColumns = useStreamSelectionStore(
+		state => state.updateDestinationKeyColumns,
+	)
 	const storeStream = useStreamSelectionStore(selectActiveStreamData)
 	const storeSelectedStream = useStreamSelectionStore(
 		selectActiveSelectedStream,
+	)
+	const isSelected = useStreamSelectionStore(state =>
+		selectIsStreamEnabled(state, storeStream),
 	)
 
 	// Auto-select first available cursor field if stream is incremental and has none set
@@ -53,6 +60,7 @@ const SyncModeSectionSingle = () => {
 			stream={storeStream}
 			syncMode={storeStream.stream.sync_mode}
 			cursorField={storeStream.stream.cursor_field}
+			isSelected={isSelected}
 			onChange={(mode, cf) =>
 				updateSyncMode(
 					{
@@ -61,6 +69,15 @@ const SyncModeSectionSingle = () => {
 					},
 					mode,
 					cf,
+				)
+			}
+			onDestinationKeyColumnsChange={columns =>
+				updateDestinationKeyColumns(
+					{
+						streamName: storeStream.stream.name,
+						namespace: storeStream.stream.namespace || "",
+					},
+					columns,
 				)
 			}
 		/>

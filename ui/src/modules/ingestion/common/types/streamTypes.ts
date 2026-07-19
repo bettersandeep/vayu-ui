@@ -52,6 +52,7 @@ export type StreamData = {
 		destination_database?: string
 		destination_table?: string
 		source_defined_primary_key?: string[]
+		destination_key_columns?: string[]
 		default_stream_properties: DefaultStreamProperties
 		[key: string]: unknown
 	}

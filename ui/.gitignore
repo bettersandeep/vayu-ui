@@ -16,3 +16,6 @@ npm-debug*
 *.env.*
 
 .DS_Store
+
+image.md
+walkthrough.md

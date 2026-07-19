@@ -1,3 +1,10 @@
+> ### 🌀 Vayu fork
+> A customized fork of **[datazip-inc/olake-ui](https://github.com/datazip-inc/olake-ui)**, based on upstream **v0.4.9**.
+> Adds replication-slot deletion flows, Fusion database-scoped compaction, and Sentry instrumentation.
+> See **[VAYU.md](./VAYU.md)** for fork details and **[CHANGELOG.md](./CHANGELOG.md)** for the release history.
+> The upstream README follows below, unchanged.
+
+---
 # OLake-UI
 
 <h1 align="center" style="border-bottom: none">

@@ -1,9 +1,15 @@
 import { WarningIcon } from "@phosphor-icons/react"
-import { Button, Modal, Table } from "antd"
+import { Button, Checkbox, Modal, Table } from "antd"
+import { isAxiosError } from "axios"
 import { formatDistanceToNow } from "date-fns"
+import { useEffect, useState } from "react"
 
 import { Entity } from "@/modules/ingestion/common/types"
-import { getConnectorImage } from "@/modules/ingestion/common/utils"
+import {
+	getConnectorImage,
+	isPostgresCDCSource,
+	REPLICATION_SLOT_DROP_WARNING,
+} from "@/modules/ingestion/common/utils"
 
 //Entity Delete Modal
 const DeleteModal = ({
@@ -17,11 +23,42 @@ const DeleteModal = ({
 	onClose: () => void
 	entity: Entity | undefined
 	fromSource: boolean
-	onDelete: () => void
+	onDelete: (opts: {
+		deleteReplicationSlot: boolean
+	}) => void | Promise<unknown>
 }) => {
-	const handleDelete = () => {
-		onDelete()
-		onClose()
+	const [deleteReplicationSlot, setDeleteReplicationSlot] = useState(false)
+	const [sharedSlotError, setSharedSlotError] = useState<string | null>(null)
+
+	const showSlotOption =
+		fromSource && isPostgresCDCSource(entity?.type, entity?.config)
+
+	useEffect(() => {
+		if (open) {
+			setDeleteReplicationSlot(false)
+			setSharedSlotError(null)
+		}
+	}, [open])
+
+	const handleDelete = async () => {
+		try {
+			await onDelete({
+				deleteReplicationSlot: showSlotOption && deleteReplicationSlot,
+			})
+			onClose()
+		} catch (error) {
+			if (isAxiosError(error) && error.response?.status === 409) {
+				// Shared replication slot: server names the blocking sources.
+				const message = (error.response.data as { message?: string })?.message
+				setSharedSlotError(
+					message ||
+						"The replication slot is shared. Uncheck the option or delete the other users of the slot first.",
+				)
+			} else {
+				// Error toast is shown by the API interceptor.
+				onClose()
+			}
+		}
 	}
 
 	const loading = false
@@ -116,8 +153,18 @@ const DeleteModal = ({
 				/>
 				<div className="flex flex-col items-center">
 					<div className="text-center text-xl font-medium text-gray-950">
-						Deleting {entity?.name} {fromSource ? "source" : "destination"} will
-						disable these <br></br>jobs. Are you sure you want to continue?
+						{dataSource && dataSource.length > 0 ? (
+							<>
+								Deleting {entity?.name} {fromSource ? "source" : "destination"}{" "}
+								will disable these <br></br>jobs. Are you sure you want to
+								continue?
+							</>
+						) : (
+							<>
+								Are you sure you want to delete the {entity?.name}{" "}
+								{fromSource ? "source" : "destination"}?
+							</>
+						)}
 					</div>
 				</div>
 
@@ -133,6 +180,32 @@ const DeleteModal = ({
 						scroll={{ y: 300 }}
 					/>
 				)}
+
+				{showSlotOption && (
+					<div className="flex w-full flex-col gap-2">
+						<Checkbox
+							checked={deleteReplicationSlot}
+							onChange={e => {
+								setDeleteReplicationSlot(e.target.checked)
+								setSharedSlotError(null)
+							}}
+						>
+							Also delete the replication slot used by this source
+						</Checkbox>
+						{deleteReplicationSlot && (
+							<div className="text-xs text-amber-600">
+								{REPLICATION_SLOT_DROP_WARNING}
+							</div>
+						)}
+					</div>
+				)}
+
+				{sharedSlotError && (
+					<div className="w-full rounded-md border border-danger bg-danger-light px-3 py-2 text-sm text-danger">
+						{sharedSlotError}
+					</div>
+				)}
+
 				<div className="flex w-full justify-end space-x-2">
 					<Button
 						className="px-4 py-4"

@@ -19,4 +19,10 @@ export const notificationService = {
 			message.error(msg, ERROR_MESSAGE_DURATION)
 		}
 	},
+	warning: (msg: string) => {
+		if (msg) {
+			message.destroy()
+			message.warning(msg, ERROR_MESSAGE_DURATION)
+		}
+	},
 }

@@ -50,6 +50,10 @@ const TestConnectionFailureModal = ({
 
 	const logs = testConnectionError?.logs ?? []
 	const fallbackMessage = testConnectionError?.message ?? ""
+	// Postgres CDC: the configured replication slot does not exist yet.
+	const showMissingSlotHint = /replication slot .* does not exist/i.test(
+		fallbackMessage,
+	)
 
 	const handleEdit = () => {
 		onEdit?.()
@@ -101,7 +105,19 @@ const TestConnectionFailureModal = ({
 					</p>
 				</div>
 
-				<div className="mt-4 h-[373px] w-[573px] self-center overflow-hidden rounded-lg bg-olake-surface-muted">
+				{showMissingSlotHint && (
+					<div className="mt-3 w-[573px] self-center rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+						Enable &apos;Create replication slot if missing&apos; in the
+						source&apos;s CDC settings and retry.
+					</div>
+				)}
+
+				<div
+					className={clsx(
+						"mt-4 w-[573px] self-center overflow-hidden rounded-lg bg-olake-surface-muted",
+						showMissingSlotHint ? "h-[301px]" : "h-[373px]",
+					)}
+				>
 					<div className="flex h-[73px] items-start justify-between px-4 pb-0 pt-4">
 						<div className="flex items-center gap-1">
 							<WarningCircleIcon
@@ -123,7 +139,12 @@ const TestConnectionFailureModal = ({
 						</button>
 					</div>
 
-					<div className="h-[300px] overflow-auto px-4 pb-4">
+					<div
+						className={clsx(
+							"overflow-auto px-4 pb-4",
+							showMissingSlotHint ? "h-[228px]" : "h-[300px]",
+						)}
+					>
 						{logs.length > 0 ? (
 							<div className="space-y-2 text-xs">
 								{logs.map((log, index) => (

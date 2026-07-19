@@ -643,11 +643,16 @@ const SourceEdit: React.FC = () => {
 				onClose={() => setShowDeleteModal(false)}
 				entity={source}
 				fromSource={true}
-				onDelete={() => {
-					if (source)
-						deleteSourceMutation.mutate(String(source.id), {
-							onSuccess: () => navigate("/sources"),
+				onDelete={opts => {
+					if (!source) return
+					// Returns the promise so DeleteModal can keep itself open on a
+					// shared-replication-slot 409.
+					return deleteSourceMutation
+						.mutateAsync({
+							id: String(source.id),
+							deleteReplicationSlot: opts?.deleteReplicationSlot,
 						})
+						.then(() => navigate("/sources"))
 				}}
 			/>
 			<EntityEditModal

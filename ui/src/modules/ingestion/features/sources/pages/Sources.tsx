@@ -32,9 +32,16 @@ const Sources: React.FC = () => {
 		navigate(`/sources/${id}`)
 	}
 
-	const handleDeleteSource = (source: Entity) => {
-		deleteSourceMutation.mutate(String(source.id))
-	}
+	const handleDeleteSource = (
+		source: Entity,
+		opts?: { deleteReplicationSlot?: boolean },
+	) =>
+		// Returns the promise so DeleteModal can keep itself open on a
+		// shared-replication-slot 409.
+		deleteSourceMutation.mutateAsync({
+			id: String(source.id),
+			deleteReplicationSlot: opts?.deleteReplicationSlot,
+		})
 
 	const filteredSources = (): Entity[] => {
 		if (activeTab === "active") {

@@ -4,7 +4,10 @@ export interface SourceTableProps {
 	sources: Entity[]
 	loading: boolean
 	onEdit: (id: string) => void
-	onDelete: (source: Entity) => void
+	onDelete: (
+		source: Entity,
+		opts?: { deleteReplicationSlot?: boolean },
+	) => void | Promise<unknown>
 }
 
 export interface Source {

@@ -79,6 +79,8 @@ const CreateSource: React.FC = () => {
 	const [showSpecFailedModal, setShowSpecFailedModal] = useState(false)
 	const [testConnectionError, setTestConnectionError] =
 		useState<TestConnectionError | null>(null)
+	// Driver warning emitted on a successful test (e.g. slot was created).
+	const [successMessage, setSuccessMessage] = useState("")
 
 	// Derived constants from current state.
 	const normalizedConnector = getConnectorInLowerCase(connector)
@@ -205,14 +207,20 @@ const CreateSource: React.FC = () => {
 			testResult.data?.connection_result.status ===
 			TEST_CONNECTION_STATUS.SUCCEEDED
 		) {
+			const warning = testResult.data?.connection_result.message || ""
+			setSuccessMessage(warning)
 			setShowSuccessModal(true)
-			setTimeout(() => {
-				setShowSuccessModal(false)
-				createSourceMutation.mutate(newSourceData, {
-					onSuccess: () => setShowEntitySavedModal(true),
-					onError: error => console.error("Error adding source:", error),
-				})
-			}, 1000)
+			// Give the user time to read the warning banner when present.
+			setTimeout(
+				() => {
+					setShowSuccessModal(false)
+					createSourceMutation.mutate(newSourceData, {
+						onSuccess: () => setShowEntitySavedModal(true),
+						onError: error => console.error("Error adding source:", error),
+					})
+				},
+				warning ? 5000 : 1000,
+			)
 		} else {
 			setTestConnectionError({
 				message: testResult.data?.connection_result.message || "",
@@ -519,6 +527,7 @@ const CreateSource: React.FC = () => {
 			<TestConnectionSuccessModal
 				open={showSuccessModal}
 				connectionType="source"
+				message={successMessage}
 			/>
 			<TestConnectionFailureModal
 				open={showFailureModal}

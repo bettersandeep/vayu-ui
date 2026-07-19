@@ -70,7 +70,6 @@ func initSentry() {
 	}
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:              dsn,
-		Environment:      os.Getenv("SENTRY_ENVIRONMENT"),
 		Release:          os.Getenv("SENTRY_RELEASE"),
 		AttachStacktrace: true,
 		TracesSampleRate: 0,

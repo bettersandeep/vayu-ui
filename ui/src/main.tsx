@@ -12,7 +12,6 @@ fetch("/api/sentry")
 		if (cfg?.dsn) {
 			Sentry.init({
 				dsn: cfg.dsn,
-				environment: cfg.environment || undefined,
 				release: cfg.release || undefined,
 				tracesSampleRate: 0,
 			})

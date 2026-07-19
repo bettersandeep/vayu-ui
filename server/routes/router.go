@@ -18,7 +18,6 @@ func RegisterRoutes(engine *gin.Engine, h *handlers.Handler) {
 	engine.GET("/api/sentry", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"dsn":         os.Getenv("SENTRY_DSN"),
-			"environment": os.Getenv("SENTRY_ENVIRONMENT"),
 			"release":     os.Getenv("SENTRY_RELEASE"),
 		})
 	})

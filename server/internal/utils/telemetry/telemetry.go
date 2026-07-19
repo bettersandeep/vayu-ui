@@ -151,8 +151,14 @@ func getLocationFromIP(ip string) *LocationInfo {
 	}
 }
 
+// analyticsDisabled short-circuits TrackEvent; events to analytics.olake.io are disabled internally.
+const analyticsDisabled = true
+
 // TrackEvent sends a custom event to Segment
 func TrackEvent(_ context.Context, eventName string, properties map[string]interface{}) error {
+	if analyticsDisabled {
+		return nil
+	}
 	if instance.httpClient == nil {
 		return fmt.Errorf("telemetry client is nil")
 	}

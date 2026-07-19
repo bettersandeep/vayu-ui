@@ -2,6 +2,7 @@ package optimization
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ func mapCatalogToDest(catalog *dto.CatalogRequest) (*models.Config, error) {
 	// Map properties based on catalog type
 	if catalog.Properties != nil {
 		config.IcebergS3Path = catalog.Properties["warehouse"]
+		config.Databases = parseDatabaseFilter(catalog.Properties[constants.OptDatabaseFilter])
 
 		if catalog.Properties["endpoint"] != "" {
 			config.S3Endpoint = catalog.Properties["endpoint"]
@@ -151,6 +153,11 @@ func mapCatalogProperties(olakeConfig *models.Config, properties map[string]stri
 		utils.SetIfNotEmpty(properties, constants.OptOLakeCreated, "true")
 	}
 
+	// Scope the optimizer's catalog exploration to the selected databases.
+	// Without this, Fusion sweeps every database in a shared catalog (e.g.
+	// account-wide Glue), including ones it cannot read or represent.
+	utils.SetIfNotEmpty(properties, constants.OptDatabaseFilter, buildDatabaseFilter(olakeConfig.Databases))
+
 	warehouse := olakeConfig.IcebergS3Path
 
 	switch strings.ToLower(olakeCatalogType) {
@@ -205,4 +212,51 @@ func mapCatalogProperties(olakeConfig *models.Config, properties map[string]stri
 			utils.SetIfNotEmpty(properties, "rest.sigv4-enabled", "false")
 		}
 	}
+}
+
+// buildDatabaseFilter converts a database list into the optimizer's
+// database-filter regex ("^(db1|db2)$"). Names are quoted so regex
+// metacharacters in database names cannot widen the match.
+func buildDatabaseFilter(databases []string) string {
+	if len(databases) == 0 {
+		return ""
+	}
+	quoted := make([]string, 0, len(databases))
+	for _, db := range databases {
+		if db = strings.TrimSpace(db); db != "" {
+			quoted = append(quoted, regexp.QuoteMeta(db))
+		}
+	}
+	if len(quoted) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("^(%s)$", strings.Join(quoted, "|"))
+}
+
+// parseDatabaseFilter is the inverse of buildDatabaseFilter: it recovers the
+// database list from a "^(db1|db2)$" regex so the catalog edit form can
+// round-trip the selection. Unrecognized filter shapes yield nil (the form
+// shows no databases; saving without changes retains the existing filter).
+func parseDatabaseFilter(filter string) []string {
+	if !strings.HasPrefix(filter, "^(") || !strings.HasSuffix(filter, ")$") {
+		return nil
+	}
+	inner := strings.TrimSuffix(strings.TrimPrefix(filter, "^("), ")$")
+	if inner == "" {
+		return nil
+	}
+	databases := make([]string, 0)
+	for _, quoted := range strings.Split(inner, "|") {
+		db := unquoteRegexMeta(quoted)
+		if db != "" {
+			databases = append(databases, db)
+		}
+	}
+	return databases
+}
+
+// unquoteRegexMeta undoes regexp.QuoteMeta for the simple names produced by
+// buildDatabaseFilter (it only ever escapes with backslashes).
+func unquoteRegexMeta(s string) string {
+	return strings.ReplaceAll(s, "\\", "")
 }

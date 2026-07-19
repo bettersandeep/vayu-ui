@@ -83,12 +83,22 @@ export const jobService = {
 		}
 	},
 
-	deleteJob: async (id: number): Promise<void> => {
+	deleteJob: async (
+		id: number,
+		deleteReplicationSlot = false,
+	): Promise<
+		{ name: string; replication_slot_warning?: string } | undefined
+	> => {
 		try {
-			await api.delete(
-				`${API_CONFIG.ENDPOINTS.ETL.JOBS(API_CONFIG.PROJECT_ID)}/${id}`,
+			const query = deleteReplicationSlot ? "?delete_replication_slot=true" : ""
+			const response = await api.delete<{
+				name: string
+				replication_slot_warning?: string
+			}>(
+				`${API_CONFIG.ENDPOINTS.ETL.JOBS(API_CONFIG.PROJECT_ID)}/${id}${query}`,
 				{ showNotification: true },
 			)
+			return response.data
 		} catch (error) {
 			console.error("Error deleting job:", error)
 			throw error

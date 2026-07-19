@@ -18,7 +18,9 @@ export interface SyncModeSectionViewProps {
 	cursorField: string | undefined
 	isDirty?: boolean
 	isBulkMode?: boolean
+	isSelected?: boolean
 	onChange?: (mode: SyncMode, cursorField?: string) => void
+	onDestinationKeyColumnsChange?: (columns: string[]) => void
 }
 
 const SyncModeSectionView = ({
@@ -27,7 +29,9 @@ const SyncModeSectionView = ({
 	cursorField,
 	isDirty,
 	isBulkMode,
+	isSelected = true,
 	onChange,
+	onDestinationKeyColumnsChange,
 }: SyncModeSectionViewProps) => {
 	const [showFallbackSelector, setShowFallbackSelector] = useState(false)
 	const [fallBackCursorField, setFallBackCursorField] = useState<string>("")
@@ -242,6 +246,85 @@ const SyncModeSectionView = ({
 										</div>
 									)}
 							</div>
+						</div>
+					)}
+				{/* Destination key columns — visible only for CDC and CDC Only modes */}
+				{!isBulkMode &&
+					onDestinationKeyColumnsChange &&
+					(syncMode === SyncMode.CDC || syncMode === SyncMode.STRICT_CDC) && (
+						<div className="mb-4">
+							<label className="mb-1 flex items-center gap-1 font-medium text-neutral-text">
+								Destination key column(s):
+								<Tooltip title="Columns used as the unique key in the destination table. Defaults to the source primary key. You can select one or more columns.">
+									<InfoIcon className="size-3.5 cursor-pointer" />
+								</Tooltip>
+							</label>
+							<Select
+								mode="multiple"
+								allowClear
+								placeholder="Select key column(s)"
+								value={
+									stream.stream.destination_key_columns ||
+									stream.stream.source_defined_primary_key ||
+									[]
+								}
+								disabled={!isSelected}
+								onChange={onDestinationKeyColumnsChange}
+								optionLabelProp="label"
+								className="w-full"
+							>
+								{Object.keys(stream.stream.type_schema?.properties || {})
+									.sort((a, b) => {
+										const aIsPK =
+											stream.stream.source_defined_primary_key?.includes(a) ||
+											false
+										const bIsPK =
+											stream.stream.source_defined_primary_key?.includes(b) ||
+											false
+										if (aIsPK && !bIsPK) return -1
+										if (!aIsPK && bIsPK) return 1
+										return a.localeCompare(b)
+									})
+									.map(col => {
+										const isPK =
+											stream.stream.source_defined_primary_key?.includes(col) ||
+											false
+										const colTypes =
+											stream.stream.type_schema!.properties[col].type
+										const primaryType = Array.isArray(colTypes)
+											? colTypes.find(t => t !== "null") || colTypes[0]
+											: colTypes
+										return (
+											<Select.Option
+												key={col}
+												value={col}
+												label={col}
+											>
+												<div className="flex w-full items-center justify-between whitespace-nowrap">
+													<Tooltip title={col}>
+														<span className="truncate">{col}</span>
+													</Tooltip>
+													<div className="flex shrink-0 items-center gap-2">
+														{isPK && (
+															<span className="rounded bg-blue-100 px-1 py-0.5 text-xs text-blue-700">
+																PK
+															</span>
+														)}
+														<span className="rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-600">
+															{primaryType}
+														</span>
+													</div>
+												</div>
+											</Select.Option>
+										)
+									})}
+							</Select>
+							{!isSelected && (
+								<div className="mt-1 flex items-center gap-1 text-sm text-[#686868]">
+									<InfoIcon className="size-4" />
+									Select the stream to configure destination key columns
+								</div>
+							)}
 						</div>
 					)}
 			</div>

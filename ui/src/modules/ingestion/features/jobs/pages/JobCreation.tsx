@@ -133,6 +133,8 @@ const JobCreation: React.FC = () => {
 	const testDestinationMutation = useTestDestinationConnection()
 	const [testConnectionError, setTestConnectionError] =
 		useState<TestConnectionError | null>(null)
+	// Driver warning emitted on a successful test (e.g. slot was created).
+	const [successMessage, setSuccessMessage] = useState("")
 	// Track which entity the connection test is for (source vs destination)
 	const [connectionTestType, setConnectionTestType] = useState<
 		"source" | "destination"
@@ -188,8 +190,11 @@ const JobCreation: React.FC = () => {
 				testResult.data?.connection_result.status ===
 				TEST_CONNECTION_STATUS.SUCCEEDED
 			) {
+				const warning = testResult.data?.connection_result.message || ""
+				setSuccessMessage(warning)
 				setShowSuccessModal(true)
-				await new Promise(resolve => setTimeout(resolve, 1000))
+				// Give the user time to read the warning banner when present.
+				await new Promise(resolve => setTimeout(resolve, warning ? 5000 : 1000))
 				setShowSuccessModal(false)
 				return true
 			}
@@ -424,6 +429,7 @@ const JobCreation: React.FC = () => {
 					/>
 					<TestConnectionSuccessModal
 						open={showSuccessModal}
+						message={successMessage}
 						connectionType={connectionTestType}
 					/>
 					<EntitySavedModal

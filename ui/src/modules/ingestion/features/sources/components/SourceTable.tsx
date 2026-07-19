@@ -10,7 +10,10 @@ import { DeleteModal } from "@/modules/ingestion/common/components"
 import JobConnection from "@/modules/ingestion/common/components/JobConnection"
 import { PAGE_SIZE } from "@/modules/ingestion/common/constants"
 import { Entity } from "@/modules/ingestion/common/types"
-import { getConnectorImage } from "@/modules/ingestion/common/utils"
+import {
+	getConnectorImage,
+	isPostgresCDCSource,
+} from "@/modules/ingestion/common/utils"
 
 import { SourceTableProps } from "../types"
 import { getConnectorLabel } from "../utils"
@@ -64,8 +67,15 @@ const SourceTable: React.FC<SourceTableProps> = ({
 								label: "Delete",
 								danger: true,
 								onClick: () => {
-									if (!record.jobs || record.jobs.length === 0) {
-										onDelete(record)
+									// Postgres CDC sources always go through the modal so the
+									// replication-slot checkbox is offered even with no jobs.
+									if (
+										(!record.jobs || record.jobs.length === 0) &&
+										!isPostgresCDCSource(record.type, record.config)
+									) {
+										void Promise.resolve(onDelete(record)).catch(() => {
+											// Error toast is shown by the API interceptor.
+										})
 									} else {
 										setDeleteEntity(record)
 										setShowDeleteModal(true)
@@ -157,9 +167,8 @@ const SourceTable: React.FC<SourceTableProps> = ({
 					onClose={() => setShowDeleteModal(false)}
 					entity={deleteEntity ?? undefined}
 					fromSource={true}
-					onDelete={() => {
-						if (deleteEntity) onDelete(deleteEntity)
-						setShowDeleteModal(false)
+					onDelete={opts => {
+						if (deleteEntity) return onDelete(deleteEntity, opts)
 					}}
 				/>
 			</div>

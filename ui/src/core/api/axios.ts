@@ -94,8 +94,14 @@ api.interceptors.response.use(
 
 			switch (status) {
 				case HTTP_STATUS.UNAUTHORIZED:
-					localStorage.removeItem(LOCALSTORAGE_TOKEN_KEY)
-					window.location.href = "/login"
+					// Verify with the server before logging out — a transient 401
+					// (e.g. pod restart, timeout) should not clear a valid session.
+					axios
+						.get("/auth/check", { withCredentials: true })
+						.catch(() => {
+							localStorage.removeItem(LOCALSTORAGE_TOKEN_KEY)
+							window.location.href = "/login"
+						})
 					break
 				case HTTP_STATUS.FORBIDDEN:
 					console.error(ERROR_MESSAGES.NO_PERMISSION)

@@ -29,7 +29,11 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
+	"time"
+
+	"github.com/getsentry/sentry-go"
 
 	"github.com/datazip-inc/olake-ui/server/internal/appconfig"
 	"github.com/datazip-inc/olake-ui/server/internal/constants"
@@ -43,9 +47,55 @@ import (
 	"github.com/datazip-inc/olake-ui/server/docs"
 )
 
+var sentryScrubRules = []struct {
+	re   *regexp.Regexp
+	repl string
+}{
+	{regexp.MustCompile(`://[^/@\s]+:[^/@\s]+@`), "://[REDACTED]@"},
+	{regexp.MustCompile(`AKIA[A-Z0-9]{16}`), "[REDACTED]"},
+	{regexp.MustCompile(`(?i)(query|statement):.*`), "$1: [REDACTED]"},
+}
+
+func sentryScrub(s string) string {
+	for _, r := range sentryScrubRules {
+		s = r.re.ReplaceAllString(s, r.repl)
+	}
+	return s
+}
+
+func initSentry() {
+	dsn := os.Getenv("SENTRY_DSN")
+	if dsn == "" {
+		return
+	}
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn:              dsn,
+		Release:          os.Getenv("SENTRY_RELEASE"),
+		AttachStacktrace: true,
+		TracesSampleRate: 0,
+		SendDefaultPII:   false,
+		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			event.Message = sentryScrub(event.Message)
+			for i := range event.Exception {
+				event.Exception[i].Value = sentryScrub(event.Exception[i].Value)
+			}
+			for i := range event.Breadcrumbs {
+				event.Breadcrumbs[i].Message = sentryScrub(event.Breadcrumbs[i].Message)
+			}
+			return event
+		},
+	})
+	if err != nil {
+		logger.Warnf("Failed to initialize Sentry: %s", err)
+	}
+}
+
 func main() {
 	constants.Init()
 	logger.Init()
+
+	initSentry()
+	defer sentry.Flush(2 * time.Second)
 
 	db, err := database.Init()
 	if err != nil {

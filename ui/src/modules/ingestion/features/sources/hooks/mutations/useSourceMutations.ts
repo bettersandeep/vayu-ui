@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query"
 
+import { notificationService } from "@/core/notifications"
 import type {
 	EntityBase,
 	EntityTestRequest,
@@ -25,7 +26,19 @@ export const useUpdateSource = (id: string) => {
 export const useDeleteSource = () => {
 	return useMutation({
 		mutationKey: sourceKeys.all(),
-		mutationFn: (id: string) => sourceService.deleteSource(id),
+		mutationFn: ({
+			id,
+			deleteReplicationSlot,
+		}: {
+			id: string
+			deleteReplicationSlot?: boolean
+		}) => sourceService.deleteSource(id, deleteReplicationSlot),
+		onSuccess: data => {
+			// Source deletion succeeded but the replication slot drop did not.
+			if (data?.replication_slot_warning) {
+				notificationService.warning(data.replication_slot_warning)
+			}
+		},
 	})
 }
 

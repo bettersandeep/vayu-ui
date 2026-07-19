@@ -6,24 +6,11 @@ import axios from "axios"
 
 import { api } from "@/core/api"
 
-// endpoint which handles rate limiting and forwards the events to mixpanel
-const ANALYTICS_ENDPOINT = "https://analytics.olake.io/mp/track"
-
+// analytics.olake.io (mixpanel forwarding) is disabled internally - events are dropped.
 const sendAnalyticsEvent = async (
-	eventName: string,
-	properties: Record<string, any>,
-) => {
-	try {
-		const eventData = {
-			event: eventName,
-			properties,
-		}
-
-		await axios.post(ANALYTICS_ENDPOINT, eventData)
-	} catch (error) {
-		console.error("Failed to send analytics event:", error)
-	}
-}
+	_eventName: string,
+	_properties: Record<string, any>,
+) => {}
 
 const getIPAddress = async (): Promise<string> => {
 	try {

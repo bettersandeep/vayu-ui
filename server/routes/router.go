@@ -1,6 +1,9 @@
 package routes
 
 import (
+	"net/http"
+	"os"
+
 	"github.com/datazip-inc/olake-ui/server/internal/handlers"
 	"github.com/gin-gonic/gin"
 )
@@ -11,6 +14,13 @@ func RegisterRoutes(engine *gin.Engine, h *handlers.Handler) {
 	engine.POST("/login", h.Login)
 	engine.GET("/auth/check", h.CheckAuth)
 	engine.GET("/telemetry-id", h.TelemetryID)
+	// unauthenticated: serves the frontend its Sentry runtime config (DSN is public by design)
+	engine.GET("/api/sentry", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"dsn":         os.Getenv("SENTRY_DSN"),
+			"release":     os.Getenv("SENTRY_RELEASE"),
+		})
+	})
 	engine.GET("/swagger/*any", h.ServeSwagger)
 
 	api := engine.Group("/api")

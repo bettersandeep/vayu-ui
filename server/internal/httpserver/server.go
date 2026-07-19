@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 
 	"github.com/datazip-inc/olake-ui/server/internal/appconfig"
@@ -33,6 +34,9 @@ func New(cfg *appconfig.Config, h *handlers.Handler) *Server {
 		SkipPaths: []string{"/health"},
 	}))
 	s.engine.Use(gin.Recovery())
+	// sentrygin runs inside gin.Recovery: it recovers the panic first, reports
+	// it to Sentry, then repanics so gin.Recovery still returns a 500 response.
+	s.engine.Use(sentrygin.New(sentrygin.Options{Repanic: true}))
 
 	s.configureRequestLimits(cfg)
 	s.configureBaseRoutes()

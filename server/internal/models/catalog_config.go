@@ -53,6 +53,11 @@ type Config struct {
 	HiveClients     int    `json:"hive_clients,omitempty"`
 	HiveSaslEnabled bool   `json:"hive_sasl_enabled,omitempty"`
 
+	// Databases limits Fusion's catalog exploration (and therefore
+	// self-optimizing) to the listed databases; mapped to the optimizer's
+	// database-filter catalog property. Empty means no restriction.
+	Databases []string `json:"databases,omitempty"`
+
 	// Iceberg Configuration
 	IcebergDatabase string `json:"iceberg_db,omitempty"`
 	IcebergS3Path   string `json:"iceberg_s3_path"`                // e.g. s3://bucket/path

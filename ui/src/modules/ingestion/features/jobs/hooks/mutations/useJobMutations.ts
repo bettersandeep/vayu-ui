@@ -1,5 +1,7 @@
 import { useMutation } from "@tanstack/react-query"
 
+import { notificationService } from "@/core/notifications"
+
 import { jobsKeys } from "../../constants"
 import { jobService } from "../../services"
 import { JobBase } from "../../types"
@@ -27,7 +29,19 @@ export const useUpdateJob = () => {
 export const useDeleteJob = () => {
 	return useMutation({
 		mutationKey: jobsKeys.all(),
-		mutationFn: (jobId: number) => jobService.deleteJob(jobId),
+		mutationFn: ({
+			jobId,
+			deleteReplicationSlot,
+		}: {
+			jobId: number
+			deleteReplicationSlot?: boolean
+		}) => jobService.deleteJob(jobId, deleteReplicationSlot),
+		onSuccess: data => {
+			// Job deletion succeeded but the replication slot drop did not.
+			if (data?.replication_slot_warning) {
+				notificationService.warning(data.replication_slot_warning)
+			}
+		},
 	})
 }
 

@@ -164,13 +164,15 @@ func (h *Handler) UpdateSource(c *gin.Context) {
 
 // @Summary Delete a source
 // @Tags Sources
-// @Description Permanently delete a specified source.
+// @Description Permanently delete a specified source, optionally dropping its postgres replication slot.
 // @Param   projectid     path    string  true    "project id (default is 123)"
 // @Param   id            path    int     true    "source id"
+// @Param   delete_replication_slot  query  bool  false  "also drop the postgres CDC replication slot used by this source"
 // @Success 200 {object} dto.JSONResponse{data=dto.DeleteSourceResponse}
 // @Failure 400 {object} dto.Error400Response "failed to validate request"
 // @Failure 401 {object} dto.Error401Response "unauthorized"
 // @Failure 404 {object} dto.Error404Response "source not found"
+// @Failure 409 {object} dto.Error409Response "replication slot shared with other sources"
 // @Failure 500 {object} dto.Error500Response "failed to delete source"
 // @Router /api/v1/project/{projectid}/sources/{id} [delete]
 func (h *Handler) DeleteSource(c *gin.Context) {
@@ -179,12 +181,16 @@ func (h *Handler) DeleteSource(c *gin.Context) {
 		utils.ErrorResponse(c, http.StatusBadRequest, fmt.Sprintf("failed to validate request: %s", err), err)
 		return
 	}
-	logger.Debugf("Delete source initiated source_id[%d]", id)
-	resp, err := h.etl.DeleteSource(c.Request.Context(), id)
+	deleteReplicationSlot := c.Query("delete_replication_slot") == "true"
+	logger.Debugf("Delete source initiated source_id[%d] delete_replication_slot[%t]", id, deleteReplicationSlot)
+	resp, err := h.etl.DeleteSource(c.Request.Context(), id, deleteReplicationSlot)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, constants.ErrSourceNotFound) {
 			status = http.StatusNotFound
+		}
+		if errors.Is(err, constants.ErrReplicationSlotShared) {
+			status = http.StatusConflict
 		}
 		utils.ErrorResponse(c, status, fmt.Sprintf("failed to delete source: %s", err), err)
 		return

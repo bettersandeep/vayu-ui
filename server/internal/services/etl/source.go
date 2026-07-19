@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/datazip-inc/olake-ui/server/internal/constants"
@@ -180,7 +181,7 @@ func (s Service) UpdateSource(ctx context.Context, projectID string, id int, req
 	return nil
 }
 
-func (s Service) DeleteSource(ctx context.Context, id int) (*dto.DeleteSourceResponse, error) {
+func (s Service) DeleteSource(ctx context.Context, id int, deleteReplicationSlot bool) (*dto.DeleteSourceResponse, error) {
 	src, err := s.db.GetSourceByID(id)
 	if err != nil {
 		if errors.Is(err, constants.ErrSourceNotFound) {
@@ -197,6 +198,38 @@ func (s Service) DeleteSource(ctx context.Context, id int) (*dto.DeleteSourceRes
 		return nil, fmt.Errorf("cannot delete source '%s' id[%d] because it is used in %d jobs; please delete the associated jobs first", src.Name, id, len(jobs))
 	}
 
+	// Slot drop only applies to postgres sources with a CDC update method.
+	dropSlot := false
+	var slotWarnings []string
+	if deleteReplicationSlot {
+		if slot, ok := parsePostgresCDCSlot(src.Type, src.Config); ok {
+			// Shared-slot guard: block only when another source on the same
+			// host+port+database+slot tuple has ACTIVE jobs. Sharing sources
+			// with no active jobs surface as a warning instead.
+			activeJobs, _, err := s.jobsSharingSlot(slot, 0)
+			if err != nil {
+				return nil, err
+			}
+			if len(activeJobs) > 0 {
+				return nil, fmt.Errorf("%w: replication slot '%s' is also used by active job(s): %s; uncheck the replication slot option or delete those jobs first",
+					constants.ErrReplicationSlotShared, slot.Slot, strings.Join(activeJobs, ", "))
+			}
+			allSources, err := s.db.ListSources()
+			if err != nil {
+				return nil, fmt.Errorf("failed to list sources for shared-slot check: %s", err)
+			}
+			if shared := sourcesSharingSlot(allSources, slot, id); len(shared) > 0 {
+				names := make([]string, 0, len(shared))
+				for _, other := range shared {
+					names = append(names, other.Name)
+				}
+				slotWarnings = append(slotWarnings, fmt.Sprintf("replication slot '%s' is also referenced by source(s): %s; validations and inactive jobs on those sources will fail until the slot is recreated",
+					slot.Slot, strings.Join(names, ", ")))
+			}
+			dropSlot = true
+		}
+	}
+
 	if err := s.db.DeleteSource(id); err != nil {
 		if errors.Is(err, constants.ErrSourceNotFound) {
 			return nil, fmt.Errorf("%w: %v", constants.ErrSourceNotFound, err)
@@ -204,8 +237,18 @@ func (s Service) DeleteSource(ctx context.Context, id int) (*dto.DeleteSourceRes
 		return nil, fmt.Errorf("failed to delete source: %s", err)
 	}
 
+	// Source deletion first, slot drop after: a failed drop surfaces as a
+	// warning while the deletion itself stays successful (drop is idempotent).
+	resp := &dto.DeleteSourceResponse{Name: src.Name}
+	if dropSlot {
+		if w := s.dropReplicationSlot(ctx, src); w != "" {
+			slotWarnings = append(slotWarnings, w)
+		}
+		resp.ReplicationSlotWarning = strings.Join(slotWarnings, "; ")
+	}
+
 	telemetry.TrackSourcesStatus(ctx)
-	return &dto.DeleteSourceResponse{Name: src.Name}, nil
+	return resp, nil
 }
 
 func (s Service) TestSourceConnection(ctx context.Context, req *dto.SourceTestConnectionRequest) (map[string]interface{}, []map[string]interface{}, error) {

@@ -64,6 +64,12 @@ interface StreamSelectionState {
 		cursorField?: string,
 	) => void
 
+	// Updates destination_key_columns on the stream.
+	updateDestinationKeyColumns: (
+		stream: StreamIdentifier,
+		columns: string[],
+	) => void
+
 	updateNormalization: (
 		stream: StreamIdentifier,
 		normalization: boolean,
@@ -225,6 +231,31 @@ export const useStreamSelectionStore = create<StreamSelectionState>()(set => ({
 			}
 
 			updatedStreams[streamIndex] = nextStream
+
+			return {
+				streamsData: { ...prev, streams: updatedStreams },
+			}
+		}),
+
+	updateDestinationKeyColumns: (stream, columns) =>
+		set(state => {
+			if (!state.streamsData) return state
+			const { streamName, namespace } = stream
+
+			const prev = state.streamsData
+			const streamIndex = prev.streams.findIndex(
+				s => s.stream.name === streamName && s.stream.namespace === namespace,
+			)
+			if (streamIndex === -1) return state
+
+			const updatedStreams = [...prev.streams]
+			updatedStreams[streamIndex] = {
+				...updatedStreams[streamIndex],
+				stream: {
+					...updatedStreams[streamIndex].stream,
+					destination_key_columns: columns,
+				},
+			}
 
 			return {
 				streamsData: { ...prev, streams: updatedStreams },

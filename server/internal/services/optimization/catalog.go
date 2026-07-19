@@ -85,8 +85,9 @@ func retainProperties(req, existing *dto.CatalogRequest) {
 	maps.Copy(existing.TableProperties, req.TableProperties)
 	req.TableProperties = existing.TableProperties
 
-	// retaining only the default catalog properties set during creation
-	keys := []string{constants.OptCreatedAt, constants.OptCacheEnabled, constants.OptOLakeCreated}
+	// retaining only the default catalog properties set during creation,
+	// plus the database-filter scoping when the update does not resend it
+	keys := []string{constants.OptCreatedAt, constants.OptCacheEnabled, constants.OptOLakeCreated, constants.OptDatabaseFilter}
 	for _, key := range keys {
 		if _, exists := req.Properties[key]; !exists {
 			if val, ok := existing.Properties[key]; ok {

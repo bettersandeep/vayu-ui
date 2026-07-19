@@ -5,9 +5,13 @@ import { DestinationSuccess } from "@/assets"
 const TestConnectionSuccessModal = ({
 	open,
 	connectionType = "source",
+	message,
 }: {
 	open: boolean
 	connectionType?: "source" | "destination" | "catalog"
+	// Optional driver warning emitted on success (e.g. a replication slot
+	// was created and WAL retention starts now).
+	message?: string
 }) => {
 	const labelMap = {
 		source: "Source",
@@ -31,6 +35,11 @@ const TestConnectionSuccessModal = ({
 						{label} test connection is successful
 					</h2>
 				</div>
+				{message && (
+					<div className="w-full rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+						{message}
+					</div>
+				)}
 			</div>
 		</Modal>
 	)

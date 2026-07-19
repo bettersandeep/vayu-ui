@@ -82,12 +82,17 @@ export const sourceService = {
 		}
 	},
 
-	deleteSource: async (id: string) => {
+	deleteSource: async (id: string, deleteReplicationSlot = false) => {
 		try {
-			await api.delete(
-				`${API_CONFIG.ENDPOINTS.ETL.SOURCES(API_CONFIG.PROJECT_ID)}/${id}`,
+			const query = deleteReplicationSlot ? "?delete_replication_slot=true" : ""
+			const response = await api.delete<{
+				name: string
+				replication_slot_warning?: string
+			}>(
+				`${API_CONFIG.ENDPOINTS.ETL.SOURCES(API_CONFIG.PROJECT_ID)}/${id}${query}`,
 				{ showNotification: true },
 			)
+			return response.data
 		} catch (error) {
 			console.error("Error deleting source:", error)
 			throw error

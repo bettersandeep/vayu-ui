@@ -54,3 +54,6 @@ ui/test-results/
 ui/playwright-report/
 ui/blob-report/
 ui/tests/.auth/
+
+image.md
+walkthrough.md

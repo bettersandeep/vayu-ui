@@ -14,6 +14,10 @@ var (
 	ErrSourceNotFound      = errors.New("source not found")
 	ErrDestinationNotFound = errors.New("destination not found")
 	ErrJobNotFound         = errors.New("job not found")
+
+	// ErrReplicationSlotShared is returned when a replication-slot drop is
+	// requested but other jobs/sources use the same slot (maps to HTTP 409).
+	ErrReplicationSlotShared = errors.New("replication slot is shared")
 )
 
 // Validation messages

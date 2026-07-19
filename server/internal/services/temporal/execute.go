@@ -246,6 +246,70 @@ func (t *Temporal) VerifyDriverCredentials(ctx context.Context, workflowID, flag
 	}, nil
 }
 
+// DropReplicationSlot runs the driver's `check --drop-replication-slot` for a
+// postgres CDC source and returns the parsed ConnectionStatus ({status, message}).
+// The drop is idempotent on the driver side. Near-copy of VerifyDriverCredentials.
+func (t *Temporal) DropReplicationSlot(ctx context.Context, workflowID, sourceType, version, config string) (map[string]interface{}, error) {
+	configs := []JobConfig{
+		{Name: "config.json", Data: config},
+	}
+
+	if err := SetupConfigFiles(Check, workflowID, configs); err != nil {
+		return nil, fmt.Errorf("failed to setup config files: %s", err)
+	}
+
+	cmdArgs := []string{
+		"check",
+		"--config",
+		"/mnt/config/config.json",
+		"--drop-replication-slot",
+	}
+	if encryptionKey := appconfig.Load().EncryptionKey; encryptionKey != "" {
+		cmdArgs = append(cmdArgs, "--encryption-key", encryptionKey)
+	}
+
+	req := &ExecutionRequest{
+		Command:       Check,
+		ConnectorType: sourceType,
+		Version:       version,
+		Args:          cmdArgs,
+		Configs:       nil,
+		WorkflowID:    workflowID,
+		Timeout:       GetWorkflowTimeout(Check),
+	}
+
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: t.taskQueue,
+	}
+
+	run, err := t.Client.ExecuteWorkflow(ctx, workflowOptions, ExecuteWorkflow, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute drop replication slot workflow: %s", err)
+	}
+
+	result, err := ExtractWorkflowResponse(ctx, run)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract workflow response: %v", err)
+	}
+
+	connectionStatus, ok := result["connectionStatus"].(map[string]interface{})
+	if !ok || connectionStatus == nil {
+		return nil, fmt.Errorf("connection status not found")
+	}
+
+	status, statusOk := connectionStatus["status"].(string)
+	message, _ := connectionStatus["message"].(string) // message is optional
+	if !statusOk {
+		return nil, fmt.Errorf("connection status not found")
+	}
+
+	return map[string]interface{}{
+		"message": message,
+		"status":  status,
+	}, nil
+}
+
 func (t *Temporal) ClearDestination(ctx context.Context, job *models.Job, streamsConfig string) error {
 	workflowID, scheduleID := t.WorkflowAndScheduleID(job.ProjectID, job.ID)
 

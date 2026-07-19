@@ -61,6 +61,16 @@ type SpecOutput struct {
 
 type DeleteSourceResponse struct {
 	Name string `json:"name" example:"my-postgres-source"`
+	// Set when delete_replication_slot was requested but the slot drop failed;
+	// the source itself is already deleted at that point.
+	ReplicationSlotWarning string `json:"replication_slot_warning,omitempty"`
+}
+
+type DeleteJobResponse struct {
+	Name string `json:"name" example:"my-job"`
+	// Set when delete_replication_slot was requested but the slot drop failed;
+	// the job itself is already deleted at that point.
+	ReplicationSlotWarning string `json:"replication_slot_warning,omitempty"`
 }
 
 type DeleteDestinationResponse struct {

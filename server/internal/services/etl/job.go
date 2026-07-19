@@ -234,24 +234,55 @@ func (s Service) UpdateJob(ctx context.Context, req *dto.UpdateJobRequest, proje
 	return nil
 }
 
-func (s Service) DeleteJob(ctx context.Context, jobID int) (string, error) {
+func (s Service) DeleteJob(ctx context.Context, jobID int, deleteReplicationSlot bool) (*dto.DeleteJobResponse, error) {
 	job, err := s.db.GetJobByID(jobID, true)
 	if err != nil {
 		if errors.Is(err, constants.ErrJobNotFound) {
-			return "", fmt.Errorf("%w: %v", constants.ErrJobNotFound, err)
+			return nil, fmt.Errorf("%w: %v", constants.ErrJobNotFound, err)
 		}
-		return "", fmt.Errorf("failed to find job: %s", err)
+		return nil, fmt.Errorf("failed to find job: %s", err)
+	}
+
+	// Slot drop only applies to postgres sources with a CDC update method.
+	var slotSource *models.Source
+	if deleteReplicationSlot && job.Source != nil {
+		if slot, ok := parsePostgresCDCSlot(job.Source.Type, job.Source.Config); ok {
+			// Shared-slot guard: block the drop (and the deletion) when any
+			// other job's source points at the same host+port+database+slot.
+			otherJobs, err := s.jobsSharingSlot(slot, jobID)
+			if err != nil {
+				return nil, err
+			}
+			if len(otherJobs) > 0 {
+				return nil, fmt.Errorf("%w: replication slot '%s' is also used by job(s): %s; uncheck the replication slot option or delete those jobs first",
+					constants.ErrReplicationSlotShared, slot.Slot, strings.Join(otherJobs, ", "))
+			}
+
+			// Cancel this job's running workflows so the slot is not active at drop time.
+			if err := cancelAllJobWorkflows(ctx, s.temporal, []*models.Job{job}, job.ProjectID); err != nil {
+				return nil, fmt.Errorf("failed to cancel running workflows before slot drop: %s", err)
+			}
+
+			slotSource = job.Source
+		}
 	}
 
 	if err = s.temporal.DeleteSchedule(ctx, job.ProjectID, job.ID); err != nil {
-		return "", fmt.Errorf("failed to delete temporal workflow: %s", err)
+		return nil, fmt.Errorf("failed to delete temporal workflow: %s", err)
 	}
 
 	if err := s.db.DeleteJob(jobID); err != nil {
-		return "", fmt.Errorf("failed to delete job: %s", err)
+		return nil, fmt.Errorf("failed to delete job: %s", err)
 	}
 
-	return job.Name, nil
+	// Job deletion first, slot drop after: a failed drop surfaces as a warning
+	// while the deletion itself stays successful (drop is idempotent, retryable).
+	resp := &dto.DeleteJobResponse{Name: job.Name}
+	if slotSource != nil {
+		resp.ReplicationSlotWarning = s.dropReplicationSlot(ctx, slotSource)
+	}
+
+	return resp, nil
 }
 
 func (s Service) SyncJob(ctx context.Context, projectID string, jobID int) (interface{}, error) {

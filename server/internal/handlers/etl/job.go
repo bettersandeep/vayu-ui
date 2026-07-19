@@ -165,13 +165,15 @@ func (h *Handler) UpdateJob(c *gin.Context) {
 
 // @Summary Delete a job
 // @Tags Jobs
-// @Description Permanently delete a specified job.
+// @Description Permanently delete a specified job, optionally dropping its postgres replication slot.
 // @Param   projectid     path    string  true    "project id (default is 123)"
 // @Param   id            path    int     true    "job id"
-// @Success 200 {object} dto.JSONResponse "job deleted successfully"
+// @Param   delete_replication_slot  query  bool  false  "also drop the postgres CDC replication slot used by this job"
+// @Success 200 {object} dto.JSONResponse{data=dto.DeleteJobResponse} "job deleted successfully"
 // @Failure 400 {object} dto.Error400Response "failed to validate request"
 // @Failure 401 {object} dto.Error401Response "unauthorized"
 // @Failure 404 {object} dto.Error404Response "job not found"
+// @Failure 409 {object} dto.Error409Response "replication slot shared with other jobs"
 // @Failure 500 {object} dto.Error500Response "failed to delete job"
 // @Router /api/v1/project/{projectid}/jobs/{id} [delete]
 func (h *Handler) DeleteJob(c *gin.Context) {
@@ -180,17 +182,21 @@ func (h *Handler) DeleteJob(c *gin.Context) {
 		utils.ErrorResponse(c, http.StatusBadRequest, fmt.Sprintf("failed to validate request: %s", err), err)
 		return
 	}
-	logger.Debugf("Delete job initiated job_id[%d]", id)
-	jobName, err := h.etl.DeleteJob(c.Request.Context(), id)
+	deleteReplicationSlot := c.Query("delete_replication_slot") == "true"
+	logger.Debugf("Delete job initiated job_id[%d] delete_replication_slot[%t]", id, deleteReplicationSlot)
+	resp, err := h.etl.DeleteJob(c.Request.Context(), id, deleteReplicationSlot)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, constants.ErrJobNotFound) {
 			status = http.StatusNotFound
 		}
+		if errors.Is(err, constants.ErrReplicationSlotShared) {
+			status = http.StatusConflict
+		}
 		utils.ErrorResponse(c, status, fmt.Sprintf("failed to delete job: %s", err), err)
 		return
 	}
-	utils.SuccessResponse(c, fmt.Sprintf("job '%s' deleted successfully", jobName), nil)
+	utils.SuccessResponse(c, fmt.Sprintf("job '%s' deleted successfully", resp.Name), resp)
 }
 
 // @Summary Check name uniqueness
